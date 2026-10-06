@@ -65,8 +65,14 @@ export class AudioInput {
       });
     };
 
+    // Keep ScriptProcessor callbacks alive without routing microphone input back to speakers.
     this.source.connect(this.processor);
-    this.processor.connect(this.context.destination);
+
+    const silentOutput = this.context.createGain();
+    silentOutput.gain.value = 0;
+    this.processor.connect(silentOutput);
+    silentOutput.connect(this.context.destination);
+    this.silentOutput = silentOutput;
   }
 
   async stop() {
@@ -75,6 +81,9 @@ export class AudioInput {
 
     this.processor = null;
     this.source = null;
+
+    this.silentOutput?.disconnect();
+    this.silentOutput = null;
 
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
