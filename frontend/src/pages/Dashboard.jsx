@@ -6,7 +6,9 @@ import { useAgentVoice } from "../hooks/useAgentVoice.js";
 
 export default function Dashboard() {
   const [command, setCommand] = useState("");
-  const { status, listening, toggleMic, sendText } = useAgentVoice();
+  const { status, listening, toggleMic, sendText } = useAgentVoice({
+    autoStart: true,
+  });
 
   const submit = () => {
     const trimmed = command.trim();
@@ -31,7 +33,7 @@ export default function Dashboard() {
             <AgentOrb listening={listening} />
           </div>
 
-          <h2>Ready for your command</h2>
+          <h2>{listening ? "Listening continuously" : "Ready for your command"}</h2>
           <p>
             Voice, vision, memory, desktop control and autonomous tasks — all from one command box.
           </p>
