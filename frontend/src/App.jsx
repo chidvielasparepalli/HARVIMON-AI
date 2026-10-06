@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
-const WS = API.replace(/^http/, "ws") + "/ws/voice";
+const WS_BASE = API.replace(/^http/, "ws") + "/ws/voice";
 
 function base64ToBytes(base64) {
   const bin = atob(base64);
@@ -52,14 +52,15 @@ export default function App() {
   const changeVoice = (nextVoice) => {
     setVoice(nextVoice);
     if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ type: "set_voice", voice: nextVoice }));
+      ws.current.close();
     }
+    setTimeout(() => connect(), 150);
   };
 
   const connect = () => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
     setStatus("connecting");
-    const socket = new WebSocket(WS);
+    const socket = new WebSocket(`${WS_BASE}?voice=${encodeURIComponent(voice)}`);
     ws.current = socket;
 
     socket.onopen = () => setStatus("connected");
