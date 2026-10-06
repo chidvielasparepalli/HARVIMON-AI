@@ -43,6 +43,7 @@ export function useAgentVoice(options = {}) {
   const outputRef = useRef(null);
   const speakingRef = useRef(false);
   const listeningRef = useRef(false);
+  const outboundRef = useRef(Promise.resolve());
 
   const [status, setStatus] = useState("offline");
   const [listening, setListening] = useState(false);
@@ -127,15 +128,35 @@ export function useAgentVoice(options = {}) {
 
     const output = new AudioOutputQueue();
 
+    const queue = (operation) => {
+      const next = outboundRef.current
+        .catch(() => {})
+        .then(operation);
+
+      outboundRef.current = next.catch(() => {});
+      return next;
+    };
+
     const input = new AudioInput({
       onSpeechStart: () => {
-        if (!speakingRef.current) return;
+        if (speakingRef.current) {
+          session.interrupt();
+          void flushPlayback();
+        }
 
-        session.interrupt();
-        void flushPlayback();
+        queue(() => session.activityStart()).catch((error) => {
+          console.error("[voice] failed to start audio activity:", error);
+          setStatus("error");
+        });
+      },
+      onSpeechEnd: () => {
+        queue(() => session.activityEnd()).catch((error) => {
+          console.error("[voice] failed to end audio activity:", error);
+          setStatus("error");
+        });
       },
       onChunk: ({ base64, mimeType }) => {
-        void session.sendAudio(base64, mimeType).catch((error) => {
+        queue(() => session.sendAudio(base64, mimeType)).catch((error) => {
           console.error("[voice] failed to send microphone audio:", error);
           setStatus("error");
         });
@@ -193,6 +214,7 @@ export function useAgentVoice(options = {}) {
 
     try {
       await inputRef.current?.stop();
+      await outboundRef.current.catch(() => {});
       await sessionRef.current?.endAudio();
       await flushPlayback();
     } finally {
