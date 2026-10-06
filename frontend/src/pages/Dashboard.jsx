@@ -1,12 +1,12 @@
 import { useState } from "react";
 import AgentOrb from "../components/agent/AgentOrb.jsx";
 import CommandComposer from "../components/agent/CommandComposer.jsx";
-import QuickActions from "../components/agent/QuickActions.jsx";
+import ChatThread from "../components/agent/ChatThread.jsx";
 import { useAgentVoice } from "../hooks/useAgentVoice.js";
 
 export default function Dashboard() {
   const [command, setCommand] = useState("");
-  const { status, listening, toggleMic, sendText } = useAgentVoice();
+  const { status, listening, messages, toggleMic, sendText } = useAgentVoice();
 
   const submit = () => {
     const trimmed = command.trim();
@@ -14,6 +14,8 @@ export default function Dashboard() {
     sendText(trimmed);
     setCommand("");
   };
+
+  const hasMessages = messages.length > 0;
 
   return (
     <>
@@ -27,26 +29,33 @@ export default function Dashboard() {
 
       <div className="dashboard-grid">
         <section className="hero panel">
-          <div className="hero-orb-wrapper">
-            <AgentOrb listening={listening} />
+          {/* Show orb + intro only when no messages yet */}
+          {!hasMessages && (
+            <>
+              <div className="hero-orb-wrapper">
+                <AgentOrb listening={listening} />
+              </div>
+              <h2>Ready for your command</h2>
+              <p>
+                Voice, vision, memory, desktop control and autonomous tasks — all from one command box.
+              </p>
+            </>
+          )}
+
+          {/* Chat thread — shows up once user sends a message */}
+          {hasMessages && (
+            <ChatThread messages={messages} />
+          )}
+
+          <div className="composer-footer">
+            <CommandComposer
+              value={command}
+              onChange={setCommand}
+              onSubmit={submit}
+              listening={listening}
+              onToggleMic={toggleMic}
+            />
           </div>
-
-          <h2>Ready for your command</h2>
-          <p>
-            Voice, vision, memory, desktop control and autonomous tasks — all from one command box.
-          </p>
-
-          <CommandComposer
-            value={command}
-            onChange={setCommand}
-            onSubmit={submit}
-            listening={listening}
-            onToggleMic={toggleMic}
-          />
-
-          <QuickActions
-            onAction={(label) => setCommand(`${label}: `)}
-          />
         </section>
 
         <aside className="right-column">
