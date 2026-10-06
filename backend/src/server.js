@@ -174,6 +174,12 @@ wss.on("connection", async (socket, request) => {
         case "audio_end":
           await engine.endAudio();
           break;
+        case "activity_start":
+          await engine.activityStart();
+          break;
+        case "activity_end":
+          await engine.activityEnd();
+          break;
         case "interrupt":
           engine.markClientInterrupted();
           break;
