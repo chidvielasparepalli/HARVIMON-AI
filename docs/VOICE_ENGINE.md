@@ -2,19 +2,32 @@
 
 This document defines the AI/voice layer and its transport contract.
 
-## Architecture
+## Browser audio pipeline
 
 ~~~text
-Frontend
+Microphone capture
+   ↓
+Browser PCM
+   ↓
+actual resampling to 16 kHz
+   ↓
+signed 16-bit PCM
    ↓ WebSocket /ws/voice
 Backend transport + security
    ↓
 createHarvimonSession()
    ↓
 Gemini Live
+   ↓
+24 kHz PCM audio
+   ↓
+Browser playback queue
 ~~~
 
 The backend transport owns origin checks, connection limits, message-rate limits, query normalization, lifecycle cleanup, and error handling.
+
+The frontend voice layer owns microphone capture, actual 16 kHz resampling, stable conversation identity, session configuration, interruption-safe playback, and browser resource cleanup.
+
 The Voice Engine owns Gemini Live configuration, voice selection, persona, language behavior, conversation memory, VAD, interruption events, transcription, and audio transport.
 
 ## Environment
@@ -29,32 +42,68 @@ GEMINI_DEFAULT_PERSONA=warm
 GEMINI_DEFAULT_LANGUAGE=auto
 ~~~
 
-`GEMINI_API_KEY` is backend-only and must never be exposed to the frontend.
+GEMINI_API_KEY is backend-only and must never be exposed to the frontend.
 
-## WebSocket contract
+## WebSocket connection
 
-Connect to `/ws/voice`.
+Connect to `/ws/voice` with:
 
-Optional query parameters: `voice`, `persona`, `language`, `conversationId`.
+~~~text
+voice=Kore
+persona=warm
+language=auto
+conversationId=<stable-session-id>
+~~~
 
-Supported personas: warm, energetic, calm, professional.
-Supported language modes: auto, en, te, code-mixed.
+The frontend stores the conversation ID in sessionStorage and reuses it during reconnects in the same browser session.
 
-Client messages: `text`, `audio`, `audio_end`, `interrupt`, `ping`.
-Server events: `ready`, `user_transcript`, `assistant_transcript`, `audio`, `interrupted`, `turn_complete`, `closed`, `error`.
+## Client → server
 
-`ping` receives a `pong` response.
-`conversationId` allows the in-memory conversation context to survive a WebSocket reconnect. Memory expires automatically.
+- `text`
+- `audio`
+- `audio_end`
+- `interrupt`
+- `ping`
 
-## Security boundary
+Audio sent by the frontend is actual signed 16-bit PCM at 16 kHz:
 
-The backend rejects WebSocket connections from origins outside `CLIENT_ORIGIN`, limits payload size and concurrent connections, and rate-limits client messages.
-The Voice Engine validates text/audio and resolves unsupported voice/persona/language values to safe defaults.
+~~~json
+{
+  "type": "audio",
+  "data": "<base64>",
+  "mimeType": "audio/pcm;rate=16000"
+}
+~~~
 
-Authentication and persistent database storage are intentionally not added yet because the current frontend contract does not require accounts or persistent user data. They can be added around this engine later without moving Gemini calls out of the backend.
+## Server → client
+
+- `ready`
+- `user_transcript`
+- `assistant_transcript`
+- `audio`
+- `interrupted`
+- `turn_complete`
+- `closed`
+- `error`
+
+Assistant audio remains signed 16-bit PCM at 24 kHz:
+
+~~~json
+{
+  "type": "audio",
+  "data": "<base64>",
+  "mimeType": "audio/pcm;rate=24000"
+}
+~~~
+
+## Interruption
+
+When HARVIMON emits `interrupted`, the frontend immediately flushes queued audio.
+
+When the user begins speaking while assistant playback is active, the frontend can send `interrupt` and flush local playback without closing the current WebSocket session.
 
 ## Integration rule
 
-Frontend code owns presentation only. It must not contain the Gemini API key, Gemini SDK calls, or the model/system prompt.
+Frontend code must not contain the Gemini API key, Gemini SDK calls, or the model/system prompt.
 
 All Gemini Live communication goes through `createHarvimonSession()` in `backend/src/ai/harvimon-engine.js`.
