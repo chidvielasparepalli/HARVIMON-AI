@@ -39,6 +39,22 @@ export default function App() {
   const [userText, setUserText] = useState("");
   const [assistantText, setAssistantText] = useState("");
   const [messages, setMessages] = useState([]);
+  const [voices, setVoices] = useState([]);
+  const [voice, setVoice] = useState("Kore");
+
+  useEffect(() => {
+    fetch(`${API}/api/voices`)
+      .then((res) => res.json())
+      .then((data) => setVoices(data.voices || []))
+      .catch(() => {});
+  }, []);
+
+  const changeVoice = (nextVoice) => {
+    setVoice(nextVoice);
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({ type: "set_voice", voice: nextVoice }));
+    }
+  };
 
   const connect = () => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
@@ -147,6 +163,13 @@ export default function App() {
           </div>
           <div className={`status ${status}`}><i />{status}</div>
         </header>
+
+        <section className="voice-picker">
+          <label htmlFor="voice">Gemini Voice</label>
+          <select id="voice" value={voice} onChange={(e) => changeVoice(e.target.value)}>
+            {voices.map((item) => <option key={item.name} value={item.name}>{item.name} — {item.style}</option>)}
+          </select>
+        </section>
 
         <section className="orb-panel">
           <div className={`orb ${listening ? "listening" : ""}`}><div className="core" /></div>
