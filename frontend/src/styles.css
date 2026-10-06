@@ -311,14 +311,354 @@ input:focus-visible {
   width: 280px;
   height: 280px;
   position: relative;
-  margin: 40px 0;
+  margin: 32px 0 36px;
   display: grid;
   place-items: center;
+  user-select: none;
 }
 
+/* Ambient glow background aura */
+.orb-ambient-glow {
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.28) 0%, rgba(59, 130, 246, 0.14) 45%, transparent 70%);
+  filter: blur(28px);
+  animation: orbAmbientFloat 6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.orb-backdrop-pulse {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, rgba(59, 130, 246, 0.2) 50%, transparent 75%);
+  filter: blur(16px);
+  animation: orbBackdropPulse 3.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Concentric orbital rings */
+.orb-orbit {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.orb-orbit-outer {
+  width: 240px;
+  height: 240px;
+  border: 1px dashed rgba(129, 140, 248, 0.25);
+  animation: orbSpinClockwise 26s linear infinite;
+}
+
+.orb-orbit-middle {
+  width: 195px;
+  height: 195px;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  animation: orbSpinCounterClockwise 18s linear infinite;
+}
+
+.orb-orbit-inner {
+  width: 150px;
+  height: 150px;
+  border: 1px dotted rgba(168, 85, 247, 0.3);
+  animation: orbSpinClockwise 12s linear infinite;
+}
+
+/* Orbiting satellite dots */
+.orb-satellite {
+  position: absolute;
+  border-radius: 50%;
+  display: block;
+}
+
+.satellite-1 {
+  width: 7px;
+  height: 7px;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #60a5fa;
+  box-shadow: 0 0 10px #60a5fa, 0 0 20px #3b82f6;
+}
+
+.satellite-2 {
+  width: 6px;
+  height: 6px;
+  bottom: 12px;
+  right: 18px;
+  background: #c084fc;
+  box-shadow: 0 0 8px #c084fc, 0 0 16px #a855f7;
+}
+
+/* Floating particles */
+.orb-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background: #93c5fd;
+  opacity: 0.7;
+}
+
+.particle.p1 {
+  width: 4px;
+  height: 4px;
+  top: 25%;
+  left: 20%;
+  animation: particleFloat 4s ease-in-out infinite;
+}
+
+.particle.p2 {
+  width: 3px;
+  height: 3px;
+  top: 30%;
+  right: 22%;
+  background: #e879f9;
+  animation: particleFloat 5.2s ease-in-out infinite 1s;
+}
+
+.particle.p3 {
+  width: 4px;
+  height: 4px;
+  bottom: 24%;
+  left: 26%;
+  background: #38bdf8;
+  animation: particleFloat 4.6s ease-in-out infinite 2s;
+}
+
+.particle.p4 {
+  width: 3px;
+  height: 3px;
+  bottom: 22%;
+  right: 24%;
+  animation: particleFloat 3.8s ease-in-out infinite 1.5s;
+}
+
+/* SVG Wave Elements */
 .agent-orb-svg {
+  position: absolute;
   width: 100%;
   height: 100%;
+  z-index: 2;
+  filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.45));
+}
+
+.svg-ring-dashed {
+  transform-origin: center;
+  animation: orbSpinClockwise 35s linear infinite;
+}
+
+.svg-ring-wave-1 {
+  transform-origin: center;
+  animation: orbBreathScale 4s ease-in-out infinite;
+}
+
+.svg-ring-tilt-1 {
+  transform-origin: center;
+  animation: orbTiltWobble 7s ease-in-out infinite;
+}
+
+.svg-ring-tilt-2 {
+  transform-origin: center;
+  animation: orbTiltWobbleReverse 9s ease-in-out infinite;
+}
+
+.svg-wave-strand {
+  transform-origin: center;
+  animation: strandMorph 5s ease-in-out infinite alternate;
+}
+
+.strand-a {
+  animation-duration: 4.5s;
+}
+
+.strand-b {
+  animation-duration: 6s;
+  animation-direction: alternate-reverse;
+}
+
+.svg-core-glow {
+  transform-origin: center;
+  animation: orbCorePulse 3s ease-in-out infinite;
+}
+
+/* Glowing luminous 3D sphere core */
+.orb-core {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #bae6fd 25%, #60a5fa 55%, #3b82f6 78%, #1e1b4b 100%);
+  box-shadow:
+    0 0 25px rgba(96, 165, 250, 0.9),
+    0 0 55px rgba(147, 51, 234, 0.6),
+    0 0 90px rgba(59, 130, 246, 0.35),
+    inset -4px -4px 12px rgba(15, 23, 42, 0.7),
+    inset 4px 4px 10px rgba(255, 255, 255, 0.9);
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  animation: orbCoreFloat 4s ease-in-out infinite;
+}
+
+.orb-core-inner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffffff 0%, #e0e7ff 50%, #93c5fd 100%);
+  box-shadow: 0 0 16px #ffffff, 0 0 30px #93c5fd;
+  display: grid;
+  place-items: center;
+  animation: orbCoreInnerShine 2.5s ease-in-out infinite alternate;
+}
+
+.orb-core-sparkle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 8px #ffffff;
+}
+
+/* Listening State Enhancements */
+.agent-orb.listening .orb-core {
+  animation: orbListeningPulse 0.95s ease-in-out infinite;
+  box-shadow:
+    0 0 35px rgba(56, 189, 248, 1),
+    0 0 75px rgba(168, 85, 247, 0.85),
+    0 0 120px rgba(59, 130, 246, 0.6),
+    inset -4px -4px 14px rgba(15, 23, 42, 0.8),
+    inset 4px 4px 12px rgba(255, 255, 255, 1);
+}
+
+.agent-orb.listening .orb-ambient-glow {
+  background: radial-gradient(circle, rgba(147, 51, 234, 0.45) 0%, rgba(56, 189, 248, 0.3) 50%, transparent 75%);
+  animation-duration: 1.8s;
+}
+
+.agent-orb.listening .orb-orbit-outer {
+  animation-duration: 9s;
+}
+
+.agent-orb.listening .orb-orbit-middle {
+  animation-duration: 6s;
+}
+
+.orb-listening-ripples {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.orb-listening-ripples .ripple {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 2px solid rgba(96, 165, 250, 0.7);
+  animation: orbRippleExpand 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.orb-listening-ripples .r2 {
+  animation-delay: 0.65s;
+}
+
+.orb-listening-ripples .r3 {
+  animation-delay: 1.3s;
+}
+
+/* Keyframes for lively orb motion */
+@keyframes orbAmbientFloat {
+  0% { transform: scale(0.92) translate(0, 0); opacity: 0.7; }
+  50% { transform: scale(1.08) translate(3px, -4px); opacity: 0.95; }
+  100% { transform: scale(0.98) translate(-3px, 3px); opacity: 0.8; }
+}
+
+@keyframes orbBackdropPulse {
+  0%, 100% { transform: scale(0.95); opacity: 0.6; }
+  50% { transform: scale(1.2); opacity: 0.9; }
+}
+
+@keyframes orbSpinClockwise {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbSpinCounterClockwise {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes orbBreathScale {
+  0%, 100% { transform: scale(0.97); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes orbTiltWobble {
+  0%, 100% { transform: rotate(25deg) scale(0.96); }
+  50% { transform: rotate(45deg) scale(1.05); }
+}
+
+@keyframes orbTiltWobbleReverse {
+  0%, 100% { transform: rotate(-30deg) scale(1.03); }
+  50% { transform: rotate(-55deg) scale(0.95); }
+}
+
+@keyframes strandMorph {
+  0% { transform: scale(0.96) rotate(0deg); opacity: 0.75; }
+  50% { transform: scale(1.04) rotate(8deg); opacity: 1; }
+  100% { transform: scale(0.98) rotate(-6deg); opacity: 0.85; }
+}
+
+@keyframes orbCorePulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.7; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+@keyframes orbCoreFloat {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-5px) scale(1.03); }
+}
+
+@keyframes orbCoreInnerShine {
+  0% { transform: scale(0.94); opacity: 0.85; }
+  100% { transform: scale(1.08); opacity: 1; }
+}
+
+@keyframes orbListeningPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+
+@keyframes orbRippleExpand {
+  0% {
+    width: 90px;
+    height: 90px;
+    opacity: 0.9;
+    border-width: 2.5px;
+  }
+  100% {
+    width: 280px;
+    height: 280px;
+    opacity: 0;
+    border-width: 0.5px;
+  }
+}
+
+@keyframes particleFloat {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.3; }
+  50% { transform: translateY(-8px) translateX(4px); opacity: 0.95; }
 }
 
 .hero h2 {
@@ -735,22 +1075,39 @@ input:focus-visible {
   }
 
   .agent-orb {
+    width: 200px;
+    height: 200px;
+    margin: 20px 0 24px;
+  }
+
+  .orb-ambient-glow {
     width: 190px;
     height: 190px;
   }
 
+  .orb-orbit-outer {
+    width: 180px;
+    height: 180px;
+  }
+
+  .orb-orbit-middle {
+    width: 145px;
+    height: 145px;
+  }
+
+  .orb-orbit-inner {
+    width: 110px;
+    height: 110px;
+  }
+
   .orb-core {
-    width: 90px;
-    height: 90px;
+    width: 60px;
+    height: 60px;
   }
 
-  .ring-one {
-    width: 130px;
-    height: 130px;
-  }
-
-  .ring-two {
-    width: 175px;
+  .orb-core-inner {
+    width: 24px;
+    height: 24px;
   }
 
   .quick-actions {

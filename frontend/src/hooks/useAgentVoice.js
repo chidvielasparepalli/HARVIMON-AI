@@ -4,7 +4,10 @@ import { createVoiceSocket } from "../services/agentService.js";
 
 export function useAgentVoice() {
   const ws = useRef(null);
-  const { pushMessage, selectedVoice } = useAgent();
+  const agent = useAgent();
+  const pushMessage = agent?.pushMessage || (() => {});
+  const selectedVoice = agent?.selectedVoice || "Aoede";
+  const messages = agent?.messages || [];
 
   const [status, setStatus] = useState("offline");
   const [listening, setListening] = useState(false);
@@ -60,5 +63,5 @@ export function useAgentVoice() {
 
   useEffect(() => { return () => { ws.current?.close(); }; }, []);
 
-  return { status, listening, toggleMic, sendText };
+  return { status, listening, messages, toggleMic, sendText };
 }

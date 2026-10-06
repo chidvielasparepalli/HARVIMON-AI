@@ -15,7 +15,7 @@ export default function Dashboard() {
     setCommand("");
   };
 
-  const hasMessages = messages.length > 0;
+  const hasMessages = Array.isArray(messages) && messages.length > 0;
 
   return (
     <>
