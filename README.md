@@ -2,31 +2,31 @@
 
 **Voice & Conversational Intelligence — Hackathon Project**
 
-HARVIMON-AI is a voice-first conversational agent designed for natural, context-aware, human-like interaction.
+HARVIMON-AI is a voice-first conversational intelligence agent designed to make human-to-AI communication feel like a natural conversation rather than a command interface.
 
-## What makes HARVIMON different
+## Core loop
 
-HARVIMON is built around conversation rather than commands:
+**Listen → Understand → Context → Respond → Speak**
 
-**Listen → Understand → Maintain Context → Respond → Speak**
+## Voice intelligence
 
-It supports:
-- Real-time bidirectional voice conversation
-- Gemini Live native audio responses
+- Gemini Live bidirectional voice conversation
 - Live user and assistant transcription
-- Natural turn-taking with server-side VAD
-- Interruption-aware playback
-- English, Telugu, and mixed Telugu-English conversation
-- Text fallback for accessibility
-- Browser microphone echo cancellation, noise suppression, and automatic gain control
-- Backend-only AI API key handling
-
-Gemini Live accepts raw 16-bit PCM audio and returns 24 kHz PCM audio, which HARVIMON streams between the browser and the backend. citeturn0search0turn0search1
+- Native Gemini audio responses
+- 16 kHz PCM input and 24 kHz PCM output
+- Automatic voice activity detection and natural turn-taking
+- Interruption / barge-in event handling
+- English, Telugu, and Telugu-English code-mixed conversation
+- Four configurable conversation personas
+- 30 Gemini prebuilt voices
+- Short-term memory that survives WebSocket reconnects
+- Text fallback through the same conversational session
+- Backend-only Gemini API key handling
 
 ## Architecture
 
-```
-Browser Microphone
+```text
+Browser microphone
       │
       │ PCM 16 kHz
       ▼
@@ -36,11 +36,11 @@ React + Vite
       ▼
 Node.js + Express + ws
       │
-      │ Gemini Live session
+      │ HARVIMON Voice Engine
       ▼
 Google Gemini Live
       │
-      ├── Context + conversation
+      ├── Context + memory
       ├── Input transcription
       ├── Native audio response
       └── Output transcription
@@ -49,45 +49,53 @@ Google Gemini Live
 Node.js WebSocket
       │
       ▼
-Browser audio queue → 24 kHz playback
+Browser audio playback ← PCM 24 kHz
 ```
 
 ## Repository
 
-```
+```text
 HARVIMON-AI/
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── styles.css
 │   └── package.json
 ├── backend/
 │   ├── src/
-│   │   └── server.js
+│   │   ├── ai/
+│   │   │   ├── harvimon-engine.js
+│   │   │   ├── memory.js
+│   │   │   ├── system-prompt.js
+│   │   │   └── voice-catalog.js
+│   │   ├── server.js
+│   │   └── ...
+│   ├── test/
 │   ├── .env.example
 │   └── package.json
 ├── docs/
-│   └── PROJECT.md
+│   ├── PROJECT.md
+│   └── VOICE_ENGINE.md
 └── README.md
 ```
 
 ## Local setup
 
-### 1. Backend
+### Backend
 
 ```bash
 cd backend
 npm install
 ```
 
-Create `.env`:
+Create backend/.env from backend/.env.example:
 
 ```env
 PORT=5000
 CLIENT_ORIGIN=http://localhost:5173
 GEMINI_API_KEY=your_key_here
 GEMINI_LIVE_MODEL=gemini-3.8-live
+GEMINI_DEFAULT_VOICE=Kore
+GEMINI_DEFAULT_PERSONA=warm
+GEMINI_DEFAULT_LANGUAGE=auto
 ```
 
 Start:
@@ -96,7 +104,13 @@ Start:
 npm run dev
 ```
 
-### 2. Frontend
+Run the voice-engine tests:
+
+```bash
+npm test
+```
+
+### Frontend
 
 Open another terminal:
 
@@ -108,11 +122,28 @@ npm run dev
 
 Open the Vite URL shown in the terminal.
 
+## WebSocket contract
+
+The browser connects to /ws/voice. Optional query parameters are:
+
+```text
+voice=Kore
+persona=warm
+language=auto
+conversationId=<stable-random-id>
+```
+
+Client messages support text, audio, audio_end, interrupt, and ping.
+
+Server events include ready, user_transcript, assistant_transcript, audio, interrupted, turn_complete, closed, and error.
+
+See docs/VOICE_ENGINE.md for the complete transport contract.
+
 ## Security
 
 The Gemini API key is used only by the backend. It is never placed in React code or sent to the browser.
 
-Never commit `.env`.
+Never commit .env.
 
 ## Hackathon focus
 
@@ -127,4 +158,4 @@ HARVIMON targets the communication gap between rigid voice commands and natural 
 
 ## Current status
 
-Hackathon MVP — real-time voice conversation pipeline integrated and ready for feature hardening, testing, and deployment.
+AI/voice foundation is implemented as a modular backend engine and is ready for frontend integration, end-to-end testing, and deployment.
