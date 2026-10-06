@@ -77,9 +77,7 @@ export async function createHarvimonSession({
       outputAudioTranscription: {},
       realtimeInputConfig: {
         automaticActivityDetection: {
-          disabled: false,
-          prefixPaddingMs: 200,
-          silenceDurationMs: 650,
+          disabled: true,
         },
       },
     },
