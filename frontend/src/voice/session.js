@@ -42,11 +42,11 @@ export class VoiceSession {
     return this.socket?.readyState === WebSocket.OPEN;
   }
 
-  updateConfig(patch) {
+  async updateConfig(patch) {
     this.config = { ...this.config, ...patch };
 
     if (this.isOpen) {
-      this.reconnect();
+      await this.reconnect();
     }
   }
 
