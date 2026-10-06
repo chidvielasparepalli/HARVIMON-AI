@@ -195,6 +195,15 @@ export class VoiceSession {
     });
   }
 
+  async activityStart() {
+    return this.send({ type: "activity_start" });
+  }
+
+  async activityEnd() {
+    if (!this.isOpen) return;
+    this.socket.send(JSON.stringify({ type: "activity_end" }));
+  }
+
   async endAudio() {
     if (!this.isOpen) return;
     this.socket.send(JSON.stringify({ type: "audio_end" }));
