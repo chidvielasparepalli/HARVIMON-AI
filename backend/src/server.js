@@ -1,161 +1,212 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
-import { GoogleGenAI, Modality } from "@google/genai";
+import { ConversationMemory } from "./ai/memory.js";
+import { createHarvimonSession } from "./ai/harvimon-engine.js";
+import { DEFAULT_VOICE, GEMINI_VOICES } from "./ai/voice-catalog.js";
+import { SUPPORTED_LANGUAGES, SUPPORTED_PERSONAS } from "./ai/system-prompt.js";
 
-const app = express();
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || true }));
-app.get("/api/health", (_req, res) => res.json({ ok: true, service: "harvimon-ai" }));
-app.get("/api/voices", (_req, res) => res.json({ voices: GEMINI_VOICES }));
+const REQUIRED_ENV = ["GEMINI_API_KEY"];
+for (const name of REQUIRED_ENV) {
+  if (!process.env[name]?.trim()) {
+    console.error(`[config] Missing required environment variable: ${name}`);
+    process.exit(1);
+  }
+}
 
 const port = Number(process.env.PORT || 5000);
-const server = app.listen(port, () => console.log(`HARVIMON backend listening on :${port}`));
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error("[config] PORT must be an integer between 1 and 65535");
+  process.exit(1);
+}
 
-const wss = new WebSocketServer({ server, path: "/ws/voice" });
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const model = process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live";
+const apiKey = process.env.GEMINI_API_KEY;
+const defaultVoice = process.env.GEMINI_DEFAULT_VOICE || DEFAULT_VOICE;
+const defaultPersona = process.env.GEMINI_DEFAULT_PERSONA || "warm";
+const defaultLanguage = process.env.GEMINI_DEFAULT_LANGUAGE || "auto";
+const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
+  .split(",").map((origin) => origin.trim()).filter(Boolean);
 
-const GEMINI_VOICES = [
-  { name: "Zephyr", style: "Bright" },
-  { name: "Puck", style: "Upbeat" },
-  { name: "Charon", style: "Informative" },
-  { name: "Kore", style: "Firm" },
-  { name: "Fenrir", style: "Excitable" },
-  { name: "Leda", style: "Youthful" },
-  { name: "Orus", style: "Firm" },
-  { name: "Aoede", style: "Breezy" },
-  { name: "Callirrhoe", style: "Easy-going" },
-  { name: "Autonoe", style: "Bright" },
-  { name: "Enceladus", style: "Breathy" },
-  { name: "Iapetus", style: "Clear" },
-  { name: "Umbriel", style: "Easy-going" },
-  { name: "Algieba", style: "Smooth" },
-  { name: "Despina", style: "Smooth" },
-  { name: "Erinome", style: "Clear" },
-  { name: "Algenib", style: "Gravelly" },
-  { name: "Rasalgethi", style: "Informative" },
-  { name: "Laomedeia", style: "Upbeat" },
-  { name: "Achernar", style: "Soft" },
-  { name: "Alnilam", style: "Firm" },
-  { name: "Schedar", style: "Even" },
-  { name: "Gacrux", style: "Mature" },
-  { name: "Pulcherrima", style: "Forward" },
-  { name: "Achird", style: "Friendly" },
-  { name: "Zubenelgenubi", style: "Casual" },
-  { name: "Vindemiatrix", style: "Gentle" },
-  { name: "Sadachbia", style: "Lively" },
-  { name: "Sadaltager", style: "Knowledgeable" },
-  { name: "Sulafat", style: "Warm" },
-];
+const MAX_WS_PAYLOAD = 1_000_000;
+const MAX_CONNECTIONS = 20;
+const MAX_QUERY_LENGTH = 128;
+const RATE_WINDOW_MS = 10_000;
+const MAX_MESSAGES_PER_WINDOW = 500;
 
-const VOICE_NAMES = new Set(GEMINI_VOICES.map((voice) => voice.name));
+const app = express();
+app.disable("x-powered-by");
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("Origin not allowed"));
+  },
+}));
+app.use(express.json({ limit: "1mb" }));
 
-const SYSTEM_INSTRUCTION = `
-You are HARVIMON, a voice-first conversational intelligence agent.
-Your job is to have natural, useful, context-aware conversations.
-Speak naturally and concisely. Do not sound like a command-line assistant.
-Understand incomplete sentences, corrections, interruptions, and conversational references.
-The user may speak English, Telugu, or mixed Telugu-English. Understand the user's language and respond naturally in the same language.
-Never claim to have performed an action unless it actually happened.
-This hackathon prototype focuses on conversation quality, context, multilingual voice interaction, and low-latency turn taking.
-`;
+const memory = new ConversationMemory();
+const activeConnections = new Set();
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "harvimon-ai",
+    aiConfigured: Boolean(apiKey),
+    model,
+    activeConnections: activeConnections.size,
+  });
+});
+
+app.get("/api/voices", (_req, res) => {
+  res.json({
+    voices: GEMINI_VOICES,
+    defaultVoice,
+    personas: SUPPORTED_PERSONAS,
+    languages: SUPPORTED_LANGUAGES,
+  });
+});
+
+const server = app.listen(port, () => {
+  console.log(`HARVIMON backend listening on :${port}`);
+});
+
+const wss = new WebSocketServer({
+  server,
+  path: "/ws/voice",
+  maxPayload: MAX_WS_PAYLOAD,
+  perMessageDeflate: false,
+  verifyClient: ({ origin }, done) => {
+    if (!origin || allowedOrigins.includes(origin)) return done(true);
+    return done(false, 403, "Origin not allowed");
+  },
+});
+
+function queryValue(params, name, fallback) {
+  const value = params.get(name);
+  if (!value) return fallback;
+  return value.slice(0, MAX_QUERY_LENGTH);
+}
+
+function createConversationId(params) {
+  const supplied = queryValue(params, "conversationId", "");
+  if (!supplied) return randomUUID();
+  const sanitized = supplied.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return sanitized || randomUUID();
+}
 
 wss.on("connection", async (socket, request) => {
-  let session;
-  const requestedVoice = new URL(request.url || "/ws/voice", "http://localhost").searchParams.get("voice");
-  const selectedVoice = VOICE_NAMES.has(requestedVoice) ? requestedVoice : "Kore";
+  if (activeConnections.size >= MAX_CONNECTIONS) {
+    socket.close(1013, "Server busy");
+    return;
+  }
+
+  activeConnections.add(socket);
+  let closed = false;
+  let messageCount = 0;
+  let rateWindowStart = Date.now();
+  let engine;
+
+  const params = new URL(request.url || "/ws/voice", "http://localhost").searchParams;
+  const conversationId = createConversationId(params);
+  const requestedVoice = queryValue(params, "voice", defaultVoice);
+  const requestedPersona = queryValue(params, "persona", defaultPersona);
+  const requestedLanguage = queryValue(params, "language", defaultLanguage);
 
   const send = (payload) => {
     if (socket.readyState === 1) socket.send(JSON.stringify(payload));
   };
 
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    activeConnections.delete(socket);
+    try { engine?.close(); } catch {}
+  };
+
   try {
-    session = await ai.live.connect({
+    engine = await createHarvimonSession({
+      apiKey,
       model,
-      config: {
-        responseModalities: [Modality.AUDIO],
-        systemInstruction: SYSTEM_INSTRUCTION,
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: selectedVoice },
-          },
-        },
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
-      },
-      callbacks: {
-        onopen: () => send({ type: "ready" }),
-        onmessage: (message) => {
-          const content = message.serverContent;
-
-          if (content?.inputTranscription?.text) {
-            send({ type: "user_transcript", text: content.inputTranscription.text });
-          }
-
-          if (content?.outputTranscription?.text) {
-            send({ type: "assistant_transcript", text: content.outputTranscription.text });
-          }
-
-          if (content?.modelTurn?.parts) {
-            for (const part of content.modelTurn.parts) {
-              if (part.inlineData?.data) {
-                send({
-                  type: "audio",
-                  data: part.inlineData.data,
-                  mimeType: part.inlineData.mimeType || "audio/pcm;rate=24000",
-                });
-              }
-            }
-          }
-
-          if (content?.interrupted) send({ type: "interrupted" });
-          if (content?.turnComplete) send({ type: "turn_complete" });
-        },
-        onerror: (error) => send({ type: "error", message: error?.message || "Live session error" }),
-        onclose: () => send({ type: "closed" }),
-      },
+      socket,
+      conversationId,
+      requestedVoice,
+      requestedPersona,
+      requestedLanguage,
+      memory,
     });
   } catch (error) {
     send({ type: "error", message: error?.message || "Could not start HARVIMON" });
-    socket.close();
+    cleanup();
+    socket.close(1011, "Voice session unavailable");
     return;
   }
 
   socket.on("message", async (raw) => {
+    if (closed) return;
+
+    const now = Date.now();
+    if (now - rateWindowStart >= RATE_WINDOW_MS) {
+      rateWindowStart = now;
+      messageCount = 0;
+    }
+    messageCount += 1;
+    if (messageCount > MAX_MESSAGES_PER_WINDOW) {
+      send({ type: "error", message: "Too many messages; slow down" });
+      socket.close(1008, "Rate limit exceeded");
+      return;
+    }
+
     try {
       const msg = JSON.parse(raw.toString());
-
-      if (msg.type === "text" && msg.text?.trim()) {
-        session.sendRealtimeInput({ text: msg.text.trim() });
-        return;
+      if (!msg || typeof msg !== "object" || Array.isArray(msg)) {
+        throw new Error("Message must be a JSON object");
       }
 
-      if (msg.type === "audio" && msg.data) {
-        session.sendRealtimeInput({
-          audio: {
-            data: msg.data,
-            mimeType: msg.mimeType || "audio/pcm;rate=16000",
-          },
-        });
-        return;
-      }
-
-      if (msg.type === "audio_end") {
-        session.sendRealtimeInput({ audioStreamEnd: true });
-        return;
-      }
-
-      if (msg.type === "interrupt") {
-        // Gemini Live VAD handles interruption natively; the client also stops playback.
-        send({ type: "interrupted" });
+      switch (msg.type) {
+        case "text":
+          await engine.sendText(msg.text);
+          break;
+        case "audio":
+          await engine.sendAudio(msg.data, msg.mimeType || "audio/pcm;rate=16000");
+          break;
+        case "audio_end":
+          await engine.endAudio();
+          break;
+        case "interrupt":
+          engine.markClientInterrupted();
+          break;
+        case "ping":
+          send({ type: "pong" });
+          break;
+        default:
+          send({ type: "error", message: "Unsupported message type" });
       }
     } catch (error) {
+      console.error("[ws] message handling error:", error);
       send({ type: "error", message: error?.message || "Invalid message" });
     }
   });
 
-  socket.on("close", () => {
-    try { session?.close(); } catch {}
+  socket.on("error", (error) => {
+    console.error("[ws] socket error:", error);
+    cleanup();
   });
+
+  socket.on("close", cleanup);
 });
+
+const shutdown = (signal) => {
+  console.log(`[server] ${signal} received, shutting down...`);
+  for (const socket of activeConnections) {
+    try { socket.close(1001, "Server shutting down"); } catch {}
+  }
+  wss.close(() => {
+    server.close(() => process.exit(0));
+  });
+  setTimeout(() => process.exit(1), 5000).unref();
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
