@@ -147,6 +147,12 @@ export async function createHarvimonSession({
         audio: { data: assertAudio(data), mimeType },
       });
     },
+    activityStart() {
+      return session.sendRealtimeInput({ activityStart: {} });
+    },
+    activityEnd() {
+      return session.sendRealtimeInput({ activityEnd: {} });
+    },
     endAudio() {
       return session.sendRealtimeInput({ audioStreamEnd: true });
     },
