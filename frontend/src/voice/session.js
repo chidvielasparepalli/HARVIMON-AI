@@ -8,7 +8,7 @@ function getConversationId() {
   const storageKey = "harvimon.conversationId";
 
   try {
-    const existing = sessionStorage.getItem(storageKey);
+    const existing = localStorage.getItem(storageKey);
     if (existing) return existing;
 
     const created =
@@ -19,13 +19,29 @@ function getConversationId() {
           "-" +
           Math.random().toString(36).slice(2);
 
-    sessionStorage.setItem(storageKey, created);
+    localStorage.setItem(storageKey, created);
     return created;
   } catch {
-    return "harvimon-" +
-      Date.now() +
-      "-" +
-      Math.random().toString(36).slice(2);
+    try {
+      const existing = sessionStorage.getItem(storageKey);
+      if (existing) return existing;
+
+      const created =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : "harvimon-" +
+            Date.now() +
+            "-" +
+            Math.random().toString(36).slice(2);
+
+      sessionStorage.setItem(storageKey, created);
+      return created;
+    } catch {
+      return "harvimon-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).slice(2);
+    }
   }
 }
 
