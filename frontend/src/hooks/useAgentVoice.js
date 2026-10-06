@@ -21,18 +21,28 @@ const DEFAULT_CONFIG = Object.freeze({
 });
 
 export function useAgentVoice(options = {}) {
+  const {
+    autoStart = false,
+    voice,
+    persona,
+    language,
+  } = options;
+
   const config = useMemo(
     () => ({
       ...DEFAULT_CONFIG,
-      ...options,
+      ...(voice ? { voice } : {}),
+      ...(persona ? { persona } : {}),
+      ...(language ? { language } : {}),
     }),
-    [options.voice, options.persona, options.language]
+    [voice, persona, language]
   );
 
   const sessionRef = useRef(null);
   const inputRef = useRef(null);
   const outputRef = useRef(null);
   const speakingRef = useRef(false);
+  const listeningRef = useRef(false);
 
   const [status, setStatus] = useState("offline");
   const [listening, setListening] = useState(false);
@@ -62,8 +72,12 @@ export function useAgentVoice(options = {}) {
             speakingRef.current = true;
             setSpeaking(true);
             try {
-              await outputRef.current?.playBase64Pcm(event.data);
-            } catch {
+              await outputRef.current?.playBase64Pcm(
+                event.data,
+                event.mimeType || "audio/pcm;rate=24000"
+              );
+            } catch (error) {
+              console.error("[voice] audio playback failed:", error);
               setStatus("error");
             }
             break;
@@ -85,13 +99,23 @@ export function useAgentVoice(options = {}) {
 
           case "socket_close":
             await flushPlayback();
-            if (!event.intentional) {
+            if (listeningRef.current && !event.intentional) {
+              setStatus("reconnecting");
+              try {
+                await session.connect();
+                setStatus("ready");
+              } catch (error) {
+                console.error("[voice] reconnect failed:", error);
+                setStatus("offline");
+              }
+            } else if (!event.intentional) {
               setStatus("offline");
             }
             break;
 
           case "socket_error":
           case "error":
+            console.error("[voice]", event.message || "Voice session error");
             setStatus("error");
             break;
 
@@ -111,7 +135,8 @@ export function useAgentVoice(options = {}) {
         void flushPlayback();
       },
       onChunk: ({ base64, mimeType }) => {
-        void session.sendAudio(base64, mimeType).catch(() => {
+        void session.sendAudio(base64, mimeType).catch((error) => {
+          console.error("[voice] failed to send microphone audio:", error);
           setStatus("error");
         });
       },
@@ -122,6 +147,7 @@ export function useAgentVoice(options = {}) {
     outputRef.current = output;
 
     return () => {
+      listeningRef.current = false;
       void input.stop();
       void output.close();
       session.close();
@@ -133,41 +159,54 @@ export function useAgentVoice(options = {}) {
 
   const startMic = useCallback(async () => {
     const session = sessionRef.current;
+    const input = inputRef.current;
+    const output = outputRef.current;
 
-    if (!session || !inputRef.current || !outputRef.current) {
+    if (!session || !input || !output) {
       setStatus("error");
       return;
     }
 
+    if (listeningRef.current) return;
+
     try {
-      await outputRef.current.ensureContext();
       await session.connect();
-      await inputRef.current.start();
+      await input.start();
+      listeningRef.current = true;
       setListening(true);
       setStatus("ready");
+
+      // Create/resume playback after the microphone is live. If the browser
+      // blocks autoplay, the AudioOutputQueue unlock listeners will resume it
+      // on the first user interaction without stopping the microphone.
+      await output.ensureContext();
     } catch (error) {
+      listeningRef.current = false;
       setListening(false);
       setStatus("error");
-      console.error("[voice] failed to start microphone:", error);
+      console.error("[voice] failed to start continuous microphone:", error);
     }
   }, []);
 
   const stopMic = useCallback(async () => {
+    listeningRef.current = false;
+
     try {
       await inputRef.current?.stop();
       await sessionRef.current?.endAudio();
+      await flushPlayback();
     } finally {
       setListening(false);
     }
-  }, []);
+  }, [flushPlayback]);
 
   const toggleMic = useCallback(() => {
-    if (listening) {
+    if (listeningRef.current) {
       void stopMic();
     } else {
       void startMic();
     }
-  }, [listening, startMic, stopMic]);
+  }, [startMic, stopMic]);
 
   const sendText = useCallback(async (text) => {
     try {
@@ -183,6 +222,16 @@ export function useAgentVoice(options = {}) {
     sessionRef.current?.interrupt();
     void flushPlayback();
   }, [flushPlayback]);
+
+  useEffect(() => {
+    if (!autoStart) return undefined;
+
+    const timer = setTimeout(() => {
+      void startMic();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [autoStart, startMic]);
 
   return {
     status,

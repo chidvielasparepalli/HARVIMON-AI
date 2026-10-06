@@ -9,3 +9,5 @@ build/
 .vscode/
 .idea/
 coverage/
+
+backend/data/

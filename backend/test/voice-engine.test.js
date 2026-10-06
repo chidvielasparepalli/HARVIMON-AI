@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { GEMINI_VOICES, DEFAULT_VOICE, resolveVoice } from "../src/ai/voice-catalog.js";
@@ -33,4 +36,24 @@ test("conversation memory keeps recent context and can be cleared", () => {
   assert.match(context, /HARVIMON/);
   memory.clear("demo");
   assert.equal(memory.getContext("demo"), "");
+});
+
+test("conversation memory persists across server instances", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "harvimon-memory-"));
+  const memoryFile = path.join(tempDir, "conversations.json");
+
+  try {
+    const first = new ConversationMemory({ filePath: memoryFile });
+    first.updateUser("persistent-demo", "Remember that my project is called HARVIMON.");
+    first.updateAssistant("persistent-demo", "Got it. I will remember HARVIMON.");
+    first.completeTurn("persistent-demo");
+
+    const second = new ConversationMemory({ filePath: memoryFile });
+    const context = second.getContext("persistent-demo");
+
+    assert.match(context, /HARVIMON/);
+    assert.match(context, /Remember that my project is called/);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
