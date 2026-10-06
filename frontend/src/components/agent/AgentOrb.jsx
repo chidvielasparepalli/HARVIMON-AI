@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 export default function AgentOrb({ listening = false }) {
   return (
     <div className={listening ? "agent-orb listening" : "agent-orb"}>
@@ -9,3 +10,6 @@ export default function AgentOrb({ listening = false }) {
     </div>
   );
 }
+=======
+export default function AgentOrb({listening=false}){return <div className={listening?"agent-orb listening":"agent-orb"}><div className="orb-glow orb-glow-a"/><div className="orb-glow orb-glow-b"/><div className="orb-core"><div className="orb-core-inner"/></div><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/></div>;}
+>>>>>>> 57070ffd59a7a27277d805d90d61ab10b9852f32
