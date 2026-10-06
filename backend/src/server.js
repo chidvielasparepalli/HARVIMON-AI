@@ -7,6 +7,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 const app = express();
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true }));
 app.get("/api/health", (_req, res) => res.json({ ok: true, service: "harvimon-ai" }));
+app.get("/api/voices", (_req, res) => res.json({ voices: GEMINI_VOICES }));
 
 const port = Number(process.env.PORT || 5000);
 const server = app.listen(port, () => console.log(`HARVIMON backend listening on :${port}`));
@@ -60,8 +61,10 @@ Never claim to have performed an action unless it actually happened.
 This hackathon prototype focuses on conversation quality, context, multilingual voice interaction, and low-latency turn taking.
 `;
 
-wss.on("connection", async (socket) => {
+wss.on("connection", async (socket, request) => {
   let session;
+  const requestedVoice = new URL(request.url || "/ws/voice", "http://localhost").searchParams.get("voice");
+  const selectedVoice = VOICE_NAMES.has(requestedVoice) ? requestedVoice : "Kore";
 
   const send = (payload) => {
     if (socket.readyState === 1) socket.send(JSON.stringify(payload));
@@ -73,6 +76,11 @@ wss.on("connection", async (socket) => {
       config: {
         responseModalities: [Modality.AUDIO],
         systemInstruction: SYSTEM_INSTRUCTION,
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: selectedVoice },
+          },
+        },
         inputAudioTranscription: {},
         outputAudioTranscription: {},
       },
