@@ -104,6 +104,13 @@ export class VoiceSession {
         }
 
         clearPromise();
+
+        this.heartbeat = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 20000);
+
         this.emit({ type: "socket_open" });
         resolve();
       };
@@ -126,6 +133,11 @@ export class VoiceSession {
       };
 
       socket.onclose = (event) => {
+        if (this.heartbeat) {
+          clearInterval(this.heartbeat);
+          this.heartbeat = null;
+        }
+
         clearPromise();
         this.emit({
           type: "socket_close",
@@ -195,6 +207,11 @@ export class VoiceSession {
     this.connectGeneration += 1;
 
     try {
+      if (this.heartbeat) {
+        clearInterval(this.heartbeat);
+        this.heartbeat = null;
+      }
+
       this.socket?.close(1000, "Client closed");
     } catch {}
 
