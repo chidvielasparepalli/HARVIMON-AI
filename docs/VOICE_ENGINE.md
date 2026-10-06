@@ -1,60 +1,94 @@
 # HARVIMON-AI Voice Engine
 
-This document defines the AI/voice layer and its transport contract.
+## End-to-end architecture
 
-## Architecture
-
-~~~text
-Frontend
-   ↓ WebSocket /ws/voice
+```text
+Dashboard UI
+    ↓
+useAgentVoice()
+    ↓
+VoiceSession
+    ↓ WebSocket /ws/voice
 Backend transport + security
-   ↓
+    ↓
 createHarvimonSession()
-   ↓
+    ↓
 Gemini Live
-~~~
+    ↓ 24 kHz PCM + transcriptions
+VoiceSession events
+    ↓
+AudioOutputQueue
+    ↓
+Browser speakers
+```
 
-The backend transport owns origin checks, connection limits, message-rate limits, query normalization, lifecycle cleanup, and error handling.
-The Voice Engine owns Gemini Live configuration, voice selection, persona, language behavior, conversation memory, VAD, interruption events, transcription, and audio transport.
+Microphone input is captured at the browser's native sample rate, downsampled to exactly 16 kHz, converted to signed 16-bit PCM, base64 encoded, and sent over WebSocket.
 
-## Environment
+## Frontend voice modules
 
-~~~text
+- `frontend/src/hooks/useAgentVoice.js` — React-facing voice controller
+- `frontend/src/voice/session.js` — WebSocket lifecycle and session configuration
+- `frontend/src/voice/audio-input.js` — microphone capture and 16 kHz conversion
+- `frontend/src/voice/audio-output.js` — 24 kHz PCM playback queue
+- `frontend/src/voice/audio.js` — PCM conversion, resampling, and RMS utilities
+
+The existing dashboard API remains unchanged: `useAgentVoice()`.
+
+## Session configuration
+
+The frontend supplies `voice`, `persona`, `language`, and a stable `conversationId`.
+The conversation ID is stored in `sessionStorage` and reused during reconnects in the same browser session.
+
+## Audio contract
+
+Browser to backend:
+
+```json
+{
+  "type": "audio",
+  "data": "<base64>",
+  "mimeType": "audio/pcm;rate=16000"
+}
+```
+
+Backend to browser:
+
+```json
+{
+  "type": "audio",
+  "data": "<base64>",
+  "mimeType": "audio/pcm;rate=24000"
+}
+```
+
+## Interruption
+
+When speech energy is detected while assistant playback is active, the browser sends `interrupt` and flushes the local playback queue without closing the WebSocket. Gemini Live interruption events are also handled by flushing local playback.
+
+## Testing
+
+Frontend unit tests are in `frontend/test/audio.test.js`.
+
+Real browser/device verification is still required for English, Telugu, mixed Telugu-English, barge-in, reconnect/context continuity, voice switching, and network recovery.
+
+## Deployment environment
+
+Frontend:
+
+```text
+VITE_API_URL=https://<deployed-backend>
+```
+
+Backend:
+
+```text
 PORT=5000
-CLIENT_ORIGIN=http://localhost:5173
-GEMINI_API_KEY=
+CLIENT_ORIGIN=https://<deployed-frontend>
+GEMINI_API_KEY=<secret>
 GEMINI_LIVE_MODEL=gemini-3.8-live
 GEMINI_DEFAULT_VOICE=Kore
 GEMINI_DEFAULT_PERSONA=warm
 GEMINI_DEFAULT_LANGUAGE=auto
-~~~
+```
 
-`GEMINI_API_KEY` is backend-only and must never be exposed to the frontend.
-
-## WebSocket contract
-
-Connect to `/ws/voice`.
-
-Optional query parameters: `voice`, `persona`, `language`, `conversationId`.
-
-Supported personas: warm, energetic, calm, professional.
-Supported language modes: auto, en, te, code-mixed.
-
-Client messages: `text`, `audio`, `audio_end`, `interrupt`, `ping`.
-Server events: `ready`, `user_transcript`, `assistant_transcript`, `audio`, `interrupted`, `turn_complete`, `closed`, `error`.
-
-`ping` receives a `pong` response.
-`conversationId` allows the in-memory conversation context to survive a WebSocket reconnect. Memory expires automatically.
-
-## Security boundary
-
-The backend rejects WebSocket connections from origins outside `CLIENT_ORIGIN`, limits payload size and concurrent connections, and rate-limits client messages.
-The Voice Engine validates text/audio and resolves unsupported voice/persona/language values to safe defaults.
-
-Authentication and persistent database storage are intentionally not added yet because the current frontend contract does not require accounts or persistent user data. They can be added around this engine later without moving Gemini calls out of the backend.
-
-## Integration rule
-
-Frontend code owns presentation only. It must not contain the Gemini API key, Gemini SDK calls, or the model/system prompt.
-
-All Gemini Live communication goes through `createHarvimonSession()` in `backend/src/ai/harvimon-engine.js`.
+The Gemini API key must remain backend-only.
