@@ -1,0 +1,1 @@
+export default function AgentOrb({listening=false}){return <div className={listening?"agent-orb listening":"agent-orb"}><div className="orb-glow orb-glow-a"/><div className="orb-glow orb-glow-b"/><div className="orb-core"><div className="orb-core-inner"/></div><div className="orb-ring ring-one"/><div className="orb-ring ring-two"/></div>;}
