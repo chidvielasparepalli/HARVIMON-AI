@@ -1,13 +1,19 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { DEFAULT_VOICE, resolveVoice } from "./voice-catalog.js";
-import { buildSystemInstruction, SUPPORTED_LANGUAGES, SUPPORTED_PERSONAS } from "./system-prompt.js";
+import {
+  buildSystemInstruction,
+  SUPPORTED_LANGUAGES,
+  SUPPORTED_PERSONAS,
+} from "./system-prompt.js";
 
 function isOpen(socket) {
   return socket.readyState === 1;
 }
 
 function safeSend(socket, payload) {
-  if (isOpen(socket)) socket.send(JSON.stringify(payload));
+  if (isOpen(socket)) {
+    socket.send(JSON.stringify(payload));
+  }
 }
 
 function isSupported(value, supportedValues, fallback) {
@@ -15,34 +21,64 @@ function isSupported(value, supportedValues, fallback) {
 }
 
 function assertText(text) {
-  if (typeof text !== "string") throw new Error("Text input must be a string");
+  if (typeof text !== "string") {
+    throw new Error("Text input must be a string");
+  }
+
   const value = text.trim();
-  if (!value) throw new Error("Text input cannot be empty");
-  if (value.length > 4000) throw new Error("Text input is too long");
+
+  if (!value) {
+    throw new Error("Text input cannot be empty");
+  }
+
+  if (value.length > 4000) {
+    throw new Error("Text input is too long");
+  }
+
   return value;
 }
 
 function assertAudio(data) {
-  if (typeof data !== "string" || !data) throw new Error("Audio payload must contain base64 data");
-  if (data.length > 300000) throw new Error("Audio chunk is too large");
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) throw new Error("Audio payload is not valid base64");
+  if (typeof data !== "string" || !data) {
+    throw new Error("Audio payload must contain base64 data");
+  }
+
+  if (data.length > 300000) {
+    throw new Error("Audio chunk is too large");
+  }
+
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
+    throw new Error("Audio payload is not valid base64");
+  }
+
   return data;
 }
 
 function appendTranscript(previous, next) {
   const incoming = String(next || "").trim();
+
   if (!incoming) return previous;
   if (!previous) return incoming;
   if (incoming === previous) return previous;
   if (incoming.startsWith(previous)) return incoming;
   if (previous.endsWith(incoming)) return previous;
-  return (previous + " " + incoming).replace(/\\s+/g, " ").trim();
+
+  return (previous + " " + incoming).replace(/\s+/g, " ").trim();
 }
 
 export async function createHarvimonSession({
-  apiKey, model, socket, conversationId, requestedVoice, requestedPersona, requestedLanguage, memory
+  apiKey,
+  model,
+  socket,
+  conversationId,
+  requestedVoice,
+  requestedPersona,
+  requestedLanguage,
+  memory,
 }) {
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured on the server");
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured on the server");
+  }
 
   const ai = new GoogleGenAI({ apiKey });
   const selectedVoice = resolveVoice(requestedVoice);
@@ -52,16 +88,23 @@ export async function createHarvimonSession({
 
   let currentUserTranscript = "";
   let currentAssistantTranscript = "";
+
   const pushEvent = (payload) => safeSend(socket, payload);
 
   const session = await ai.live.connect({
     model,
     config: {
       responseModalities: [Modality.AUDIO],
-      systemInstruction: buildSystemInstruction({ persona, language, memoryContext }),
+      systemInstruction: buildSystemInstruction({
+        persona,
+        language,
+        memoryContext,
+      }),
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: selectedVoice },
+          prebuiltVoiceConfig: {
+            voiceName: selectedVoice,
+          },
         },
       },
       inputAudioTranscription: {},
@@ -76,22 +119,36 @@ export async function createHarvimonSession({
     },
     callbacks: {
       onopen: () => {
-        pushEvent({ type: "ready", conversationId, voice: selectedVoice, persona, language, model });
+        pushEvent({
+          type: "ready",
+          conversationId,
+          voice: selectedVoice,
+          persona,
+          language,
+          model,
+        });
       },
+
       onmessage: (message) => {
         const content = message.serverContent;
         if (!content) return;
 
         const inputText = content.inputTranscription?.text;
         if (inputText) {
-          currentUserTranscript = appendTranscript(currentUserTranscript, inputText);
+          currentUserTranscript = appendTranscript(
+            currentUserTranscript,
+            inputText
+          );
           memory?.updateUser(conversationId, inputText);
           pushEvent({ type: "user_transcript", text: inputText });
         }
 
         const outputText = content.outputTranscription?.text;
         if (outputText) {
-          currentAssistantTranscript = appendTranscript(currentAssistantTranscript, outputText);
+          currentAssistantTranscript = appendTranscript(
+            currentAssistantTranscript,
+            outputText
+          );
           memory?.updateAssistant(conversationId, outputText);
           pushEvent({ type: "assistant_transcript", text: outputText });
         }
@@ -100,6 +157,7 @@ export async function createHarvimonSession({
           for (const part of content.modelTurn.parts) {
             const audioData = part.inlineData?.data;
             if (!audioData) continue;
+
             pushEvent({
               type: "audio",
               data: audioData,
@@ -108,20 +166,34 @@ export async function createHarvimonSession({
           }
         }
 
-        if (content.interrupted) pushEvent({ type: "interrupted" });
+        if (content.interrupted) {
+          pushEvent({ type: "interrupted" });
+        }
 
         if (content.turnComplete) {
           pushEvent({ type: "turn_complete" });
-          if (currentUserTranscript || currentAssistantTranscript) memory?.completeTurn(conversationId);
+
+          if (currentUserTranscript || currentAssistantTranscript) {
+            memory?.completeTurn(conversationId);
+          }
+
           currentUserTranscript = "";
           currentAssistantTranscript = "";
         }
       },
+
       onerror: (error) => {
-        pushEvent({ type: "error", message: error?.message || "Gemini Live session error" });
+        pushEvent({
+          type: "error",
+          message: error?.message || "Gemini Live session error",
+        });
       },
+
       onclose: (event) => {
-        pushEvent({ type: "closed", reason: event?.reason || "Live session closed" });
+        pushEvent({
+          type: "closed",
+          reason: event?.reason || "Live session closed",
+        });
       },
     },
   });
@@ -130,18 +202,32 @@ export async function createHarvimonSession({
     voice: selectedVoice,
     persona,
     language,
+
     sendText(text) {
       session.sendRealtimeInput({ text: assertText(text) });
     },
+
     sendAudio(data, mimeType = "audio/pcm;rate=16000") {
-      session.sendRealtimeInput({ audio: { data: assertAudio(data), mimeType } });
+      session.sendRealtimeInput({
+        audio: {
+          data: assertAudio(data),
+          mimeType,
+        },
+      });
     },
+
     endAudio() {
       session.sendRealtimeInput({ audioStreamEnd: true });
     },
+
     close() {
-      try { session.close(); } catch { /* SDK may already be closed. */ }
+      try {
+        session.close();
+      } catch {
+        // The SDK may have already closed the session.
+      }
     },
+
     markClientInterrupted() {
       pushEvent({ type: "interrupted" });
     },
